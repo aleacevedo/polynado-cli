@@ -42,11 +42,12 @@ async function printMATICBalance({ address, name }) {
 }
 
 /** Display ERC20 account balance */
-/**async function printERC20Balance({ address, name, tokenAddress }) {
+async function printERC20Balance({ address, name, tokenAddress }) {
   const erc20ContractJson = require('./build/contracts/ERC20Mock.json')
   erc20 = tokenAddress ? new web3.eth.Contract(erc20ContractJson.abi, tokenAddress) : erc20
-  console.log(`${name} Token Balance is`, web3.utils.fromWei(await erc20.methods.balanceOf(address).call()))
-}*/
+  console.log(`${name} token balance is`, web3.utils.fromWei(await erc20.methods.balanceOf(address).call()))
+}
+
 
 /**
  * Create deposit object from secret and nullifier
@@ -81,11 +82,10 @@ async function deposit({ currency, amount }) {
     await printMATICBalance({ address: senderAccount, name: 'Sender account' })
     console.log('Deposit successful.')
   } else { // a token
-    //await printERC20Balance({ address: polynado._address, name: 'Polynado' })
-    //await printERC20Balance({ address: senderAccount, name: 'Sender account' })
+    await printERC20Balance({ address: polynado._address, name: 'Polynado' })
+    await printERC20Balance({ address: senderAccount, name: 'Sender account' })
     const decimals = config.deployments[`netId${netId}`][currency].decimals
     const tokenAmount = fromDecimals({ amount, decimals })
-
     const allowance = await erc20.methods.allowance(senderAccount, polynado._address).call({ from: senderAccount })
     console.log('Current allowance is', fromWei(allowance))
     if (toBN(allowance).lt(toBN(tokenAmount))) {
@@ -95,8 +95,9 @@ async function deposit({ currency, amount }) {
 
     console.log('Submitting deposit transaction')
     await polynado.methods.deposit(toHex(deposit.commitment)).send({ from: senderAccount, gas: 2e6 })
-    //await printERC20Balance({ address: polynado._address, name: 'Polynado' })
-    //await printERC20Balance({ address: senderAccount, name: 'Sender account' })
+    await printERC20Balance({ address: polynado._address, name: 'Polynado' })
+    await printERC20Balance({ address: senderAccount, name: 'Sender account' })
+    console.log('Deposit successful.')
   }
 
   return noteString
@@ -414,7 +415,7 @@ function parseNote(noteString) {
  * Init web3, contracts, and snark
  */
 async function init({ rpc, noteNetId, currency, amount }) {
-  let contractJson, erc20ContractJson, erc20polynadoJson, polynadoAddress, tokenAddress
+  let contractJson, erc20ContractJson, polynadoAddress, tokenAddress
     // Initialize from local node
     web3 = new Web3(rpc, null, { transactionConfirmationBlocks: 1 })
     contractJson = require('./build/contracts/MATICPolynado.json')
@@ -432,8 +433,7 @@ async function init({ rpc, noteNetId, currency, amount }) {
     } else {
       console.log('Warning! PRIVATE_KEY not found. Please provide PRIVATE_KEY in .env file if you deposit')
     }
-    //erc20ContractJson = require('./build/contracts/ERC20Mock.json')
-    erc20polynadoJson = require('./build/contracts/ERC20Polynado.json')
+    erc20ContractJson = require('./build/contracts/ERC20Mock.json')
   
   // groth16 initialises a lot of Promises that will never be resolved, that's why we need to use process.exit to terminate the CLI
   groth16 = await buildGroth16()
@@ -447,14 +447,14 @@ async function init({ rpc, noteNetId, currency, amount }) {
     if (!polynadoAddress) {
       throw new Error()
     }
-    //tokenAddress = config.deployments[`netId${netId}`][currency].tokenAddress
+    tokenAddress = config.deployments[`netId${netId}`][currency].tokenAddress
   } catch (e) {
     console.error('There is no such polynado instance, check the currency and amount you provide')
     process.exit(1)
   }
   
   polynado = new web3.eth.Contract(contractJson.abi, polynadoAddress)
-  //erc20 = currency !== 'eth' ? new web3.eth.Contract(erc20ContractJson.abi, tokenAddress) : {}
+  erc20 = currency !== 'matic' ? new web3.eth.Contract(erc20ContractJson.abi, tokenAddress) : {}
 }
 
 async function main() {
@@ -480,13 +480,12 @@ async function main() {
     program
       .command('balance <address> [token_address]')
       .description('Check MATIC and ERC20 balance')
-      //.action(async (address, tokenAddress) => {
-      .action(async (address) => {
+      .action(async (address, tokenAddress) => {
         await init({ rpc: program.rpc })
         await printMATICBalance({ address, name: '' })
-        //if (tokenAddress) {
-          //await printERC20Balance({ address, name: '', tokenAddress })
-        //}
+        if (tokenAddress) {
+          await printERC20Balance({ address, name: '', tokenAddress })
+        }
       })
     try {
       await program.parseAsync(process.argv)
